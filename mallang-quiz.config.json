@@ -1,0 +1,14 @@
+{
+  "postsDir": "C:/Github/SoftHamzzi.github.io/_posts",
+  "outputDir": "./quiz-output",
+  "excludePatterns": [
+    "algorithm/2023-09-28-segment-tree.md",
+    "game_dev/portfolio",
+    "game_dev/technique",
+    "ps",
+    "routine",
+    "test"
+  ],
+  "quizCount": 5,
+  "language": "ko"
+}

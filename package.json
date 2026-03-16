@@ -1,0 +1,11 @@
+{
+  "name": "mallang-quiz",
+  "version": "1.0.0",
+  "description": "AI-powered daily quiz generator from markdown posts (powered by Claude Code)",
+  "scripts": {
+    "collect": "node scripts/collect.js"
+  },
+  "dependencies": {
+    "ignore": "^6.0.2"
+  }
+}

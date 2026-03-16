@@ -1,0 +1,9 @@
+{
+  "allowedTools": [
+    "Bash(rm -rf .quiz-cache*)",
+    "Bash(rm -rf quiz-output*)",
+    "Bash(node scripts/*)",
+    "Bash(mkdir -p*)",
+    "Bash(cp *)"
+  ]
+}
