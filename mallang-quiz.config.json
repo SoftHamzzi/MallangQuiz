@@ -1,5 +1,5 @@
 {
-  "postsDir": "C:/Github/SoftHamzzi.github.io/_posts",
+  "postsDir": "C:/Github/gitblog/SoftHamzzi.github.io/_posts",
   "outputDir": "./quiz-output",
   "excludePatterns": [
     "algorithm/2023-09-28-segment-tree.md",

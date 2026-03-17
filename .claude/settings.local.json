@@ -3,7 +3,9 @@
     "allow": [
       "Skill(claude-api)",
       "Bash(ls:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(node scripts/collect.js)",
+      "Read(//tmp/**)"
     ]
   }
 }
