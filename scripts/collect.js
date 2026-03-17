@@ -128,12 +128,12 @@ async function resolveImage(img, postDir) {
         return null;
       }
     }
-    return { alt, path: destPath, filename, source: 'external', originalUrl: src };
+    return { alt, path: destPath, filename, source: 'external', originalSrc: src };
   } else {
     const abs = path.resolve(postDir, src);
     if (!fs.existsSync(abs)) return null;
     const filename = makeFilename(abs, path.basename(abs));
-    return { alt, path: abs, filename, source: 'local' };
+    return { alt, path: abs, filename, source: 'local', originalSrc: src };
   }
 }
 
@@ -167,9 +167,19 @@ walk(postsDir);
 // ── Random pick ───────────────────────────────────────────────────────────────
 
 function pickRandom(arr, n) {
-  const picked = [];
-  for (let i = 0; i < n; i++) {
-    picked.push(arr[Math.floor(Math.random() * arr.length)]);
+  if (arr.length === 0) return [];
+
+  const picked = Array.from({ length: n }, () => ({ ...arr[Math.floor(Math.random() * arr.length)] }));
+
+  const countMap = {};
+  for (const post of picked) {
+    countMap[post.absolutePath] = (countMap[post.absolutePath] || 0) + 1;
+  }
+  const indexMap = {};
+  for (const post of picked) {
+    indexMap[post.absolutePath] = (indexMap[post.absolutePath] || 0) + 1;
+    post.occurrenceIndex = indexMap[post.absolutePath];
+    post.totalOccurrences = countMap[post.absolutePath];
   }
   return picked;
 }
@@ -181,8 +191,10 @@ const picked = pickRandom(posts, quizCount);
 async function main() {
   const imageMap = {};
 
+  const seen = new Set();
   for (const post of picked) {
-    if (!post.hasImages) continue;
+    if (!post.hasImages || seen.has(post.absolutePath)) continue;
+    seen.add(post.absolutePath);
     const content = fs.readFileSync(post.absolutePath, 'utf-8');
     const rawImages = extractImages(content);
     const postDir = path.dirname(post.absolutePath);

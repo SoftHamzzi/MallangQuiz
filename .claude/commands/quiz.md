@@ -12,43 +12,60 @@ node scripts/collect.js
 - `outputFolder`: 결과를 저장할 폴더 경로 (날짜+시간 포함, 스크립트가 결정)
 - `quizCount`: 생성할 문제 수
 - `language`: 퀴즈 언어 ("ko" 또는 "en")
-- `posts[]`: 랜덤으로 선택된 `quizCount`개의 포스트 `{ title, relativePath, absolutePath, hasImages }`
-- `imageMap`: `{ "<absolutePath>": [{ alt, path, filename, source }] }` (이미지 없는 포스트는 키 없음)
+- `posts[]`: 랜덤으로 선택된 `quizCount`개의 포스트 `{ title, relativePath, absolutePath, hasImages, occurrenceIndex, totalOccurrences }`
+  - `totalOccurrences > 1`이면 같은 포스트가 여러 번 선택된 것
+  - `occurrenceIndex`는 해당 포스트가 몇 번째로 등장하는지 (1부터 시작)
+- `imageMap`: `{ "<absolutePath>": [{ alt, path, filename, source, originalSrc }] }` (이미지 없는 포스트는 키 없음)
 
-## 2단계: 출력 폴더 생성
+## 2단계: 템플릿 읽기
+
+Glob 도구로 `quiz-templates/*.md` 패턴으로 템플릿 파일 목록을 가져온 뒤, 모든 파일을 Read 도구로 읽으세요 (동시에 읽어도 됩니다).
+
+각 템플릿 파일은 다음 구조를 가집니다:
+- frontmatter의 `name`: 템플릿 이름
+- frontmatter의 `description`: 언제 이 템플릿을 쓸지 설명
+- `### 문제지 형식`: quiz.md에 사용할 마크다운 형식
+- `### 해답지 형식`: answers.md에 사용할 마크다운 형식
+- `{난이도}` 플레이스홀더는 이모지+텍스트를 함께 씁니다 (예: `🟢 쉬움` / `🟡 보통` / `🔴 어려움`)
+
+## 3단계: 출력 폴더 생성
 
 `outputFolder` 경로로 폴더를 생성하세요:
 
 ```bash
-mkdir -p "<outputFolder>/images"
+mkdir -p "<outputFolder>"
 ```
 
-## 3단계: 포스트 읽기 및 퀴즈 생성
+## 4단계: 포스트 읽기 및 퀴즈 생성
 
-선택된 각 포스트에 대해 **문제 1개**를 만드세요.
-(총 문제 수가 포스트 수보다 많으면 일부 포스트에서 2개 생성)
+`posts[]`의 각 항목이 문제 1개에 1:1 대응합니다.
 
-각 포스트마다:
+문제 생성 전 준비:
+- `totalOccurrences > 1`인 포스트가 있으면, 해당 포스트의 모든 항목을 먼저 그룹으로 묶으세요. 포스트를 읽은 뒤 핵심 개념 목록을 `totalOccurrences`개 이상 추출하고, `occurrenceIndex` 순서대로 서로 다른 개념을 하나씩 배정하세요. 이후 각 항목은 배정된 개념으로만 문제를 만드세요.
+
+각 항목마다:
 1. Read 도구로 `absolutePath` 파일을 읽으세요 (5개 동시에 읽으세요)
-2. 해당 포스트의 이미지가 있다면 `imageMap[absolutePath]`에서 이미지 정보를 가져오고, 각 이미지의 `path`도 Read 도구로 읽으세요
-3. 해당 포스트의 핵심 개념을 테스트하는 문제를 만드세요
-4. 문제에 이미지를 포함하기로 결정했다면 출력 폴더로 복사하세요:
-   ```bash
-   cp "<image.path>" "<outputFolder>/images/<image.filename>"
+2. 해당 포스트의 이미지가 있다면 `imageMap[absolutePath]`에서 이미지 정보를 가져오고, 각 이미지의 `path`도 Read 도구로 읽으세요 (이미지 내용 파악용)
+3. 포스트 내용을 바탕으로 **가장 적합한 템플릿을 선택**하세요:
+   - 각 템플릿의 `description`을 참고하여 해당 포스트 내용과 잘 맞는 것을 고르세요
+   - 전체 문제에서 템플릿이 다양하게 분포되도록 하세요 (같은 템플릿 연속 3개 이상 금지)
+4. 선택한 템플릿의 형식에 맞춰 문제를 만드세요
+5. 문제에 이미지를 포함하기로 결정했다면 `image.originalSrc`를 그대로 사용하세요 (로컬 캐시 경로 직접 사용 금지):
    ```
-   마크다운에서는 반드시 아래 형태로만 참조하세요 (원본/캐시 경로 직접 사용 금지):
-   ```
-   ![<image.alt>](images/<image.filename>)
+   ![<image.alt>](<image.originalSrc>)
    ```
 
 퀴즈 생성 기준:
 - 핵심 개념·원리·구현 방법을 테스트하는 질문
 - 단순 암기보다 이해를 확인하는 질문 선호
-- 난이도: easy / medium / hard 혼합
+- 난이도: 쉬움 / 보통 / 어려움 혼합
+- **문제는 반드시 자기완결적이어야 합니다**: 출처 마크다운을 읽지 않아도 문제 본문만으로 충분히 이해하고 풀 수 있어야 합니다. 필요한 배경 지식·코드·조건은 문제 안에 직접 포함하세요.
 
-## 4단계: 결과 파일 생성
+## 5단계: 결과 파일 생성
 
 `outputFolder` 안에 두 파일을 작성하세요.
+
+각 문제는 **2단계에서 읽은 템플릿의 형식**을 그대로 사용합니다. 아래는 파일 헤더 형식입니다.
 
 ### quiz.md (문제지 — 정답 없음)
 
@@ -60,23 +77,7 @@ mkdir -p "<outputFolder>/images"
 
 ---
 
-## Q1. 🟡 보통
-
-{질문 내용}
-
-![이미지설명](images/파일명.png)  ← 이미지가 있는 경우에만
-
-> **출처:** `{relativePath}`
-
----
-
-## Q2. 🔴 어려움
-
-{질문 내용}
-
-> **출처:** `{relativePath}`
-
----
+{각 문제를 선택한 템플릿의 "문제지 형식"으로 작성}
 ```
 
 ### answers.md (해답지 — 문제 + 정답)
@@ -89,31 +90,7 @@ mkdir -p "<outputFolder>/images"
 
 ---
 
-## Q1. 🟡 보통
-
-**문제:** {질문 내용}
-
-![이미지설명](images/파일명.png)  ← 이미지가 있는 경우에만
-
-**정답:**
-
-{상세한 답변}
-
-> **출처:** `{relativePath}`
-
----
-
-## Q2. 🔴 어려움
-
-**문제:** {질문 내용}
-
-**정답:**
-
-{상세한 답변}
-
-> **출처:** `{relativePath}`
-
----
+{각 문제를 선택한 템플릿의 "해답지 형식"으로 작성}
 ```
 
 두 파일 생성 후 경로를 알려주세요.
