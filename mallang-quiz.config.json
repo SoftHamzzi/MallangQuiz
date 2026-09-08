@@ -10,5 +10,10 @@
     "test"
   ],
   "quizCount": 5,
-  "language": "ko"
+  "language": "ko",
+  "wrongNote": {
+    "enabled": true,
+    "ratio": 0.2,
+    "maxStage": 2
+  }
 }
