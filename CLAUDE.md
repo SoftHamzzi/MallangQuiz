@@ -15,6 +15,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install                                    # 의존성: ignore 하나
 npm run collect                                # = node scripts/collect.js
 node scripts/prepare-grade.js "<문제지 경로|파일명>"
+node scripts/wrongnote.js pick                 # 오답노트에서 재출제할 문제 뽑기
+node scripts/wrongnote.js record --input <채점 결과 JSON>  # 오답노트 갱신
 ```
 
 두 스크립트 모두 **인자 없이 단독 실행 가능**하며, 결과를 stdout에 JSON으로 뱉습니다. 동작을 확인할 때는 슬래시 커맨드를 거치지 말고 스크립트를 직접 돌려 JSON을 보는 편이 빠릅니다.
@@ -23,8 +25,8 @@ node scripts/prepare-grade.js "<문제지 경로|파일명>"
 
 | 커맨드 | 역할 |
 |---|---|
-| `/quiz` | 포스트에서 퀴즈 5문제 생성 → `quiz-output/{YYYYMMDD_HHMMSS}/quiz.md` + `answers.md` |
-| `/grade <문제지>` | 풀어 놓은 문제지 채점 → 같은 폴더에 `*_quiz.md` → `*_answer.md` 생성 |
+| `/quiz` | 포스트에서 퀴즈 5문제 생성(+오답노트에서 일부 재출제) → `quiz-output/{YYYYMMDD_HHMMSS}/quiz.md` + `answers.md` |
+| `/grade <문제지>` | 풀어 놓은 문제지 채점 → 같은 폴더에 `*_quiz.md` → `*_answer.md` 생성, 오답노트 갱신 |
 | `/clear-cache` | `.quiz-cache` 삭제 |
 | `/clear-output` | `quiz-output` 삭제 |
 
@@ -48,11 +50,15 @@ Node 스크립트 (scripts/*.js)           ← 기계적 작업: 파일 탐색, 
 ```
 mallang-quiz.config.json (postsDir → 저장소 외부의 블로그 _posts)
         │
-   collect.js ──► 랜덤 포스트 N개 + 이미지 → /quiz가 문제 출제 → quiz-output/{날짜시간}/
-        │                                                              │
-        │                                            사용자가 quiz.md를 블로그 폴더로 복사해 풀이
-        │                                                              ▼
-   prepare-grade.js ──► 문제지 + 원본 answers.md + 출처 문서 매칭 → /grade가 채점 → *_answer.md
+   collect.js ──► 랜덤 포스트 N개 + 이미지 ─┐
+   wrongnote.js pick ──► 오답노트 K개 ──────┼─► /quiz가 문제 출제 → quiz-output/{날짜시간}/
+                                            │                              │
+                                            │            사용자가 quiz.md를 블로그 폴더로 복사해 풀이
+                                            │                              ▼
+                          prepare-grade.js ──► 문제지 + 원본 answers.md + 출처 문서 매칭 → /grade가 채점 → *_answer.md
+                                                                              │
+                                                                              ▼
+                                                              wrongnote.js record ──► .quiz-wrongnote/wrongnotes.json 갱신
 ```
 
 `postsDir`은 **이 저장소 밖**(블로그 리포)을 가리킵니다. 문서 내 상대 경로는 항상 `postsDir` 기준으로 해석됩니다.
@@ -88,6 +94,16 @@ mallang-quiz.config.json (postsDir → 저장소 외부의 블로그 _posts)
 
 `/grade`는 문제지(`*_quiz.md`)를 절대 수정하지 않습니다. 쓰는 파일은 `*_answer.md` 하나뿐입니다.
 
+### 오답노트: `.quiz-wrongnote/wrongnotes.json`
+
+말해보카식 복습 큐입니다. 자세한 설계 배경은 [docs/wrong-note-plan.md](docs/wrong-note-plan.md) 참고.
+
+- **저장 항목**: 문제/해답 블록 전체가 아니라 `source`(출처), `template`, `difficulty`, `concept`(무엇을 테스트하는지 한 줄 요약), `recentQuestions`(최근 낸 문구, 중복 방지용)만 저장합니다. 재출제할 때마다 `/quiz`가 이 정보를 바탕으로 **매번 새 문구로 변형해서** 다시 출제하기 때문에, 저장해둔 문제 원문 자체는 필요 없습니다.
+- **stage 2단계**: `stage 0` → 만점(⭕) → `stage 1` → 또 만점 → **마스터, 삭제**. 만점이 아닌 판정(🔺/❌/⬜)은 언제든 즉시 `stage 0`으로 리셋합니다. 연속 두 번 만점이어야 사라집니다.
+- **`> **오답노트:** \`wn-xxxxxxxx\`** 줄**: `> **출처:**` 줄처럼 구조적 키입니다. `prepare-grade.js`가 파싱해 `questions[].wrongNoteId`로 내려주고, `/grade`가 이 ID로 `wrongnote.js record`를 호출해 **정확히 그 항목만** 갱신합니다. 텍스트 유사도 비교 같은 모호한 매칭이 없습니다 — 이 줄 형식을 바꾸면 오답노트 갱신이 조용히 끊깁니다 (출처 줄과 동일한 주의사항).
+- **정답 기준은 그대로**: 오답노트 문제도 그날의 `quiz-output/{날짜시간}/`에 일반 문제와 함께 생성되므로, `/grade`의 기존 출처-목록 순서 매칭이 수정 없이 정답 기준 파일을 찾습니다. ID는 오답노트 항목 갱신에만 쓰입니다.
+- **`/quiz`가 뽑는 개수**: `mallang-quiz.config.json`의 `wrongNote.ratio`(기본 0.2) × `quizCount`를 반올림. `wrongNote.enabled=false`면 뽑지 않습니다.
+
 ### 출력 파일은 Jekyll 포스트
 
 블로그로 옮겨진 문제지에는 Jekyll frontmatter가 붙습니다. `prepare-grade.js`가 `title`의 `... 문제` → `... 해답`만 치환하고 **나머지 줄과 공백을 그대로 보존한** `answerFrontmatter`를 넘겨줍니다. 커맨드는 그걸 그대로 써야 합니다 — 직접 재구성하지 마세요.
@@ -95,6 +111,7 @@ mallang-quiz.config.json (postsDir → 저장소 외부의 블로그 _posts)
 ## 주의사항
 
 - **`quiz-output/`을 함부로 지우지 마세요.** `/grade`가 원본 `answers.md`를 정답 기준으로 삼습니다. `/clear-output`을 돌리면 이후 채점 정확도가 떨어집니다.
+- **`.quiz-wrongnote/`도 함부로 지우지 마세요.** `quiz-output/`과 마찬가지로 `/clear-cache`, `/clear-output` 대상이 아닙니다. 지우면 그동안 쌓인 복습 이력(stage)이 전부 초기화됩니다.
 - **`.gitignore`가 비어 있고 `node_modules/`가 커밋되어 있습니다.** 의존성 관련 작업 시 대량 diff가 생길 수 있습니다.
 - **`scripts/fetch-images.js`는 현재 쓰이지 않습니다.** `collect.js`가 동일한 이미지 수집 로직(`downloadImage`/`extractImages`/`resolveImage`)을 자체적으로 갖고 있고, 어디서도 `fetch-images.js`를 호출하지 않습니다. 이미지 처리를 고칠 때는 `collect.js` 쪽을 보세요.
 - 이미지는 `.quiz-cache/images/`에 해시 prefix를 붙여 받지만, **결과 마크다운에는 원본 URL(`originalSrc`)을 씁니다.** 로컬 캐시 경로를 출력에 넣으면 블로그에서 깨집니다.

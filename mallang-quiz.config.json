@@ -4,11 +4,17 @@
   "excludePatterns": [
     "algorithm/2023-09-28-segment-tree.md",
     "game_dev/portfolio",
+    "game_dev/devlog",
     "game_dev/technique",
     "ps",
     "routine",
     "test"
   ],
   "quizCount": 5,
-  "language": "ko"
+  "language": "ko",
+  "wrongNote": {
+    "enabled": true,
+    "ratio": 0.2,
+    "maxStage": 2
+  }
 }

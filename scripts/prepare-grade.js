@@ -49,6 +49,7 @@ function matchesOutsideFence(content, regex) {
 }
 
 const SOURCE_RE = /^>\s*\*\*출처:\*\*\s*`([^`]+)`/gm;
+const WRONGNOTE_RE = /^>\s*\*\*오답노트:\*\*\s*`([^`]+)`/gm;
 const HEADING_RE = /^##\s+Q(\d+)\.\s*(.+)$/gm;
 const ANSWER_MARKER_RE = /\*\*📝\s*내\s*(선택|풀이|답)\s*:\*\*/;
 
@@ -172,6 +173,9 @@ const questions = headings.map((h, i) => {
   const source = srcMatch ? srcMatch[1].trim() : null;
   const sourceAbsolutePath = source ? path.join(postsDir, source) : null;
 
+  const wrongNoteMatch = matchesOutsideFence(block, WRONGNOTE_RE)[0];
+  const wrongNoteId = wrongNoteMatch ? wrongNoteMatch[1].trim() : null;
+
   const marker = block.match(ANSWER_MARKER_RE);
   let userAnswer = '';
   if (marker) {
@@ -181,12 +185,16 @@ const questions = headings.map((h, i) => {
       .trim();
   }
 
+  // 오답노트 문제는 제목 줄에 " · 📌 오답노트 (N번째 복습)" 배지가 붙으므로 난이도만 분리
+  const difficulty = h[2].trim().split(' · ')[0].trim();
+
   return {
     number: Number(h[1]),
-    difficulty: h[2].trim(),
+    difficulty,
     source,
     sourceAbsolutePath,
     sourceExists: sourceAbsolutePath ? fs.existsSync(sourceAbsolutePath) : false,
+    wrongNoteId,
     answerLabel: marker ? marker[1] : null,
     userAnswer,
     unanswered: isPlaceholder(userAnswer),

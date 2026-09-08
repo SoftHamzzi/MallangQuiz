@@ -25,7 +25,8 @@ node scripts/prepare-grade.js "$ARGUMENTS"
 - `postDate`, `quizTitle`, `answerTitle`: 날짜와 제목
 - `answerFrontmatter`: 문제지 frontmatter의 title만 해답용으로 바꾼 블록 (**그대로 사용**)
 - `preamble`: frontmatter 다음에 오는 블로그 안내 문구 (**그대로 사용**)
-- `questions[]`: `{ number, difficulty, source, sourceAbsolutePath, sourceExists, answerLabel, userAnswer, unanswered }`
+- `questions[]`: `{ number, difficulty, source, sourceAbsolutePath, sourceExists, wrongNoteId, answerLabel, userAnswer, unanswered }`
+  - `wrongNoteId`: 오답노트에서 나온(변형 재출제된) 문제면 `wn-xxxxxxxx` 형태의 ID, 아니면 `null`
 - `matchedOutput`: 대응하는 원본 해답지 `{ folder, answersPath, quizPath, orderedMatches, exact }` (못 찾으면 `null`)
 - `warnings[]`: 확인이 필요한 사항
 
@@ -117,6 +118,7 @@ Write 도구로 `answerPath`에 아래 형식으로 작성하세요.
 각 문제 블록은 **해당 문제가 쓴 템플릿의 "해답지 형식"을 그대로 따르되**, 아래 두 가지를 추가합니다.
 
 1. 제목 줄에 채점 결과를 덧붙입니다: `## Q{번호}. {난이도} — {판정기호} {획득}/10`
+   - `questions[].wrongNoteId`가 있는 문제는 오답노트 배지도 함께 유지하세요: `## Q{번호}. {난이도} · 📌 오답노트 — {판정기호} {획득}/10`, 그리고 문제지에 있던 `> **오답노트:** \`{id}\` · ...` 줄을 `> **출처:**` 줄 아래에 그대로 옮겨 적으세요.
 2. `**정답:**` **바로 앞**에 사용자의 답안을 인용하고, 해설 뒤에 피드백을 붙입니다.
 
 객관식 예시:
@@ -158,6 +160,43 @@ Write 도구로 `answerPath`에 아래 형식으로 작성하세요.
 - **Q{번호} {주제}** — {무엇을 다시 봐야 하는지 한 줄} → `{출처}`
 ```
 
-## 5단계: 보고
+## 5단계: 오답노트 갱신
 
-생성한 파일 경로와 함께 **총점 / 등급 / 문항별 결과 한 줄 요약**을 알려주세요.
+4단계에서 매긴 판정을 바탕으로 오답노트(`.quiz-wrongnote/wrongnotes.json`)를 갱신하세요. 이 단계는 채점 결과를 저장소에 반영만 하는 기계적 작업이므로, 판단(누구를 오답노트에 넣을지)은 이미 4단계에서 끝난 상태입니다.
+
+1. 문항별로 아래 필드를 담은 배열을 구성하세요.
+
+   ```json
+   {
+     "wrongNoteId": "1단계 questions[].wrongNoteId 그대로 (없으면 생략)",
+     "source": "questions[].source",
+     "template": "2단계에서 판별한 템플릿 파일명 (예: fill-in-the-blank)",
+     "difficulty": "questions[].difficulty",
+     "concept": "이 문제가 정확히 무엇을 테스트하는지 한 줄 요약",
+     "questionText": "문제 본문(질문 문장)만 — 보기/코드 블록 제외",
+     "score": "이번에 매긴 점수(숫자)",
+     "judgment": "⭕ / 🔺 / ❌ / ⬜ 중 하나"
+   }
+   ```
+
+   - `concept`은 **`wrongNoteId`가 없고 판정이 `⭕`가 아닌(=신규 오답으로 등록될) 문제에만** 채우세요. 그 외에는 생략해도 됩니다.
+   - `wrongNoteId`가 있는 문제(오답노트에서 변형 재출제된 문제)는 이번 판정이 `⭕`든 아니든 반드시 배열에 포함하세요 — stage 전이가 여기서 일어납니다.
+
+2. Write 도구로 이 배열을 `.quiz-wrongnote/tmp-record.json`에 저장하세요.
+3. Bash 도구로 아래 명령을 실행하세요.
+
+   ```bash
+   node scripts/wrongnote.js record --input .quiz-wrongnote/tmp-record.json
+   ```
+
+4. 출력 JSON(`{ added, advanced, reset, mastered, ignored, totalItems }`)을 확인한 뒤, 임시 파일을 삭제하세요.
+
+   ```bash
+   rm .quiz-wrongnote/tmp-record.json
+   ```
+
+스크립트가 실패해도 이미 작성된 해답 파일(`*_answer.md`)은 그대로 유효합니다 — 오답노트 갱신 실패를 이유로 해답 파일을 지우거나 재작성하지 마세요. 실패 사유만 사용자에게 알리세요.
+
+## 6단계: 보고
+
+생성한 파일 경로와 함께 **총점 / 등급 / 문항별 결과 한 줄 요약**, 그리고 **오답노트 갱신 요약**(신규/단계상승/리셋/마스터 개수)을 알려주세요.
